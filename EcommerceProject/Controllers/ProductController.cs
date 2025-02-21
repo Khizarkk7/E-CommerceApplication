@@ -1,8 +1,8 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using EcommerceProject.Models;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using System.Data;
 using System.Data.SqlClient;
-using EcommerceProject.Models;
-using Microsoft.EntityFrameworkCore;
 
 namespace EcommerceProject.Controllers
 {
@@ -140,17 +140,16 @@ namespace EcommerceProject.Controllers
                             while (await reader.ReadAsync())
                             {
                                 products.Add(new
-                                {
-                                    ProductId = reader["product_id"],
-                                    ProductName = reader["product_name"],
-                                    Description = reader["description"],
-                                    Price = reader["price"],
-                                    ImageUrl = reader["image_url"],
-                                    StockQuantity = reader["stock_quantity"],
-                                    CreatedAt = reader["created_at"]
-                                });
+                               {
+                                 ProductId = Convert.ToInt32(reader["product_id"]),
+                                 ProductName = reader["product_name"].ToString(),
+                                 Description = reader.IsDBNull(reader.GetOrdinal("description")) ? null : reader["description"].ToString(),
+                                 Price = Convert.ToDecimal(reader["price"]),
+                                 ImageUrl = reader.IsDBNull(reader.GetOrdinal("image_url")) ? null : reader["image_url"].ToString(),
+                                 StockQuantity = Convert.ToInt32(reader["stock_quantity"]),
+                                 CreatedAt = Convert.ToDateTime(reader["created_at"])
+                               });
                             }
-
                             if (products.Count == 0)
                             {
                                 return NotFound("No products found for this shop.");
@@ -171,6 +170,42 @@ namespace EcommerceProject.Controllers
             }
         }
 
+
+
+        [HttpDelete("SoftDeleteProduct/{productId}")]
+        public async Task<IActionResult> SoftDeleteProduct(int productId)
+        {
+            try
+            {
+                using (SqlConnection conn = new SqlConnection(_connectionString))
+                {
+                    await conn.OpenAsync();
+
+                    using (SqlCommand cmd = new SqlCommand("SoftDeleteProduct", conn))
+                    {
+                        cmd.CommandType = CommandType.StoredProcedure;
+                        cmd.Parameters.AddWithValue("@product_id", productId);
+
+                        int rowsAffected = await cmd.ExecuteNonQueryAsync();
+
+                        if (rowsAffected == 0)
+                        {
+                            return NotFound("Product not found.");
+                        }
+
+                        return Ok("Product soft deleted successfully.");
+                    }
+                }
+            }
+            catch (SqlException ex)
+            {
+                return StatusCode(500, $"SQL error: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Internal server error: {ex.Message}");
+            }
+        }
 
 
 

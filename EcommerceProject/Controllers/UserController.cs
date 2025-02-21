@@ -3,6 +3,10 @@ using Microsoft.EntityFrameworkCore;
 using EcommerceProject.Models;
 using System.Data.SqlClient;
 using System.Data;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
 
 
 namespace EcommerceProject.Controllers
@@ -131,8 +135,6 @@ namespace EcommerceProject.Controllers
         }
 
 
-
-
         [HttpDelete("delete/{userId}")]
         public async Task<IActionResult> DeleteUser(int userId)
         {
@@ -171,7 +173,7 @@ namespace EcommerceProject.Controllers
         }
 
 
+
     }
 
 }
-
