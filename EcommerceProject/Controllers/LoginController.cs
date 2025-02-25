@@ -47,16 +47,17 @@ namespace EcommerceProject.Controllers
                             int userId = reader.GetInt32(0);
                             string username = reader.GetString(1);
                             string role = reader.GetString(2);
-                            int shopDeletedFlag = reader.GetInt32(3); // Fetch deleted flag
+                            bool shopDeletedFlag = reader.GetBoolean(reader.GetOrdinal("deleted_flag"));
 
-                            if (shopDeletedFlag == 1)
+                            if (shopDeletedFlag) // BIT values are true/false
                             {
                                 return Unauthorized("This shop is deactivated. Contact support.");
                             }
 
-                             string token = GenerateJwtToken(userId, username, role);
+                            string token = GenerateJwtToken(userId, username, role);
                             return Ok(new { Token = token, Username = username, Role = role });
                         }
+
                     }
                 }
             }
@@ -66,15 +67,22 @@ namespace EcommerceProject.Controllers
 
         private string GenerateJwtToken(int userId, string username, string role)
         {
-            var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:Key"]));
+            string jwtKey = _configuration["Jwt:Key"];
+
+            if (string.IsNullOrEmpty(jwtKey))
+            {
+                throw new ArgumentNullException("Jwt:Key is missing in appsettings.json.");
+            }
+
+            var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));
             var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
 
             var claims = new[]
             {
-                new Claim(JwtRegisteredClaimNames.Sub, username),
-                new Claim("UserId", userId.ToString()),
-                new Claim(ClaimTypes.Role, role)
-            };
+        new Claim(JwtRegisteredClaimNames.Sub, username),
+        new Claim("UserId", userId.ToString()),
+        new Claim(ClaimTypes.Role, role)
+    };
 
             var token = new JwtSecurityToken(
                 issuer: _configuration["Jwt:Issuer"],
@@ -86,6 +94,7 @@ namespace EcommerceProject.Controllers
 
             return new JwtSecurityTokenHandler().WriteToken(token);
         }
+
     }
 }
 
