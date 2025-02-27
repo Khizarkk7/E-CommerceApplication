@@ -79,7 +79,7 @@
 <h3>How to Run the Frontend</h3>
 <ol>
     <li>Clone the repository:
-        <pre><code>git clone &lt;repo-link&gt;</code></pre>
+        <pre><code>git clone &lt;https://github.com/Khizarkk7/E-CommerceApplication.git&gt;</code></pre>
     </li>
     <li>Navigate to the project directory:
         <pre><code>cd e-commerce-frontend</code></pre>
