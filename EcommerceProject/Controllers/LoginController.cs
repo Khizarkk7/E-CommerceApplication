@@ -65,7 +65,7 @@ namespace EcommerceProject.Controllers
             return Unauthorized("Invalid email or password.");
         }
 
-        private string GenerateJwtToken(int userId, string username, string role)
+        private string GenerateJwtToken(int userId, string username, string role) //Jwt method
         {
             string jwtKey = _configuration["Jwt:Key"];
 

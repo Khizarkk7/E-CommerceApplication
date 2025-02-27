@@ -30,12 +30,24 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAngularApp", policy =>
+    {
+        policy.WithOrigins("http://localhost:4200")  //  Allow Angular App
+              .AllowAnyMethod()                      //  Allow GET, POST, PUT, DELETE
+              .AllowAnyHeader()                      //  Allow Headers
+              .AllowCredentials();                   //  Allow Cookies/Auth
+    });
+});
+
 
 // swagger  for testing Apis
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
+app.UseCors("AllowAngularApp");
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
