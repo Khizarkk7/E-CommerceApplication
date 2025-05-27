@@ -65,6 +65,63 @@ namespace EcommerceProject.Controllers
             return Unauthorized("Invalid email or password.");
         }
 
+        [HttpPost("Register")]
+        public async Task<IActionResult> Register([FromBody] RegisterRequest userRequest)
+        {
+            if (string.IsNullOrEmpty(userRequest.Username) ||
+                string.IsNullOrEmpty(userRequest.Email) ||
+                string.IsNullOrEmpty(userRequest.Password) ||
+                userRequest.RoleId == null || userRequest.RoleId <= 0)
+            {
+                return BadRequest("All fields are required.");
+            }
+
+            using (SqlConnection conn = new SqlConnection(_connectionString))
+            {
+                await conn.OpenAsync();
+
+                // Optional Step: Validate roleId exists
+                string roleQuery = "SELECT COUNT(*) FROM Roles WHERE role_id = @RoleId";
+                SqlCommand roleCmd = new SqlCommand(roleQuery, conn);
+                roleCmd.Parameters.AddWithValue("@RoleId", userRequest.RoleId);
+                int roleExists = (int)await roleCmd.ExecuteScalarAsync();
+
+                if (roleExists == 0)
+                    return BadRequest("Invalid role selected.");
+
+                // Optional Step: Validate shopId exists if provided
+                int? shopId = null;
+                if (userRequest.ShopId != null && userRequest.ShopId > 0)
+                {
+                    string shopQuery = "SELECT COUNT(*) FROM Shops WHERE shop_id = @ShopId AND deleted_flag = 0";
+                    SqlCommand shopCmd = new SqlCommand(shopQuery, conn);
+                    shopCmd.Parameters.AddWithValue("@ShopId", userRequest.ShopId);
+                    int shopExists = (int)await shopCmd.ExecuteScalarAsync();
+
+                    if (shopExists == 0)
+                        return BadRequest("Invalid shop selected.");
+
+                    shopId = userRequest.ShopId;
+                }
+
+                // Insert user
+                string insertQuery = @"INSERT INTO Users (username, email, password, role_id, shop_id, created_at, is_active)
+                               VALUES (@Username, @Email, @Password, @RoleId, @ShopId, GETDATE(), 0)";
+                SqlCommand insertCmd = new SqlCommand(insertQuery, conn);
+                insertCmd.Parameters.AddWithValue("@Username", userRequest.Username);
+                insertCmd.Parameters.AddWithValue("@Email", userRequest.Email);
+                insertCmd.Parameters.AddWithValue("@Password", userRequest.Password);
+                insertCmd.Parameters.AddWithValue("@RoleId", userRequest.RoleId);
+                insertCmd.Parameters.AddWithValue("@ShopId", (object?)shopId ?? DBNull.Value);
+
+                await insertCmd.ExecuteNonQueryAsync();
+                return Ok(new { succeeded = true, message = "User registered successfully." });
+
+
+            }
+        }
+
+
         private string GenerateJwtToken(int userId, string username, string role) //Jwt method
         {
             string jwtKey = _configuration["Jwt:Key"];

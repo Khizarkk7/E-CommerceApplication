@@ -1,7 +1,8 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using System.Data;
 using System.Data.SqlClient;
-using EcommerceProject.Models; 
+using EcommerceProject.Models;
+using Microsoft.EntityFrameworkCore;
 
 namespace YourProjectNamespace.Controllers
 {
@@ -191,6 +192,19 @@ namespace YourProjectNamespace.Controllers
                 return StatusCode(500, $"Internal server error: {ex.Message}");
             }
         }
+
+        [HttpGet]
+        public async Task<IActionResult> GetShops()
+        {
+            var shops = await _context.Shops
+                .Where(s => s.DeletedFlag == false) // or s.DeletedFlag == 0
+                .Select(s => new { s.ShopId, s.ShopName })
+                .ToListAsync();
+
+            return Ok(shops);
+        }
+
+
 
 
     }
