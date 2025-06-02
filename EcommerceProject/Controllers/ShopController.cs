@@ -204,6 +204,41 @@ namespace YourProjectNamespace.Controllers
             return Ok(shops);
         }
 
+        // GET: api/Shop/GetAllShops
+        [HttpGet("GetAllShops")]
+        public async Task<IActionResult> GetAllShops()
+        {
+            try
+            {
+                var shops = await (from shop in _context.Shops
+                                   join user in _context.Users
+                                   on shop.CreatorId equals user.UserId
+                                   where shop.DeletedFlag == false
+                                   select new
+                                   {
+                                       shop.ShopId,
+                                       shop.ShopName,
+                                       shop.Description,
+                                       shop.ContactInfo,
+                                       shop.Logo,
+                                       shop.CreatedAt,
+                                       CreatorName = user.Username // fetched via join
+                                   }).ToListAsync();
+
+                if (shops == null || shops.Count == 0)
+                {
+                    return NotFound("No active shops found.");
+                }
+
+                return Ok(shops);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "An error occurred while retrieving shops.", error = ex.Message });
+            }
+        }
+
+
 
 
 
