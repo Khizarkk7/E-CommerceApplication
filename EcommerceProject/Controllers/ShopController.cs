@@ -22,10 +22,29 @@ namespace YourProjectNamespace.Controllers
 
         // POST: api/Shop/CreateShop
         [HttpPost("CreateShop")]
-        public async Task<IActionResult> CreateShop([FromBody] ShopRequest shop)
+        public async Task<IActionResult> CreateShop([FromForm] ShopRequest shop)
         {
             if (shop == null)
                 return BadRequest("Shop details are required.");
+
+            string logoFilePath = null;
+
+            // Upload the logo file
+            if (shop.Logo != null && shop.Logo.Length > 0)
+            {
+                var uploadsFolder = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads");
+                if (!Directory.Exists(uploadsFolder))
+                    Directory.CreateDirectory(uploadsFolder);
+
+                var uniqueFileName = $"{Guid.NewGuid()}_{Path.GetFileName(shop.Logo.FileName)}";
+                logoFilePath = Path.Combine("uploads", uniqueFileName); // Relative path
+                var fullFilePath = Path.Combine(uploadsFolder, uniqueFileName); // Absolute path
+
+                using (var fileStream = new FileStream(fullFilePath, FileMode.Create))
+                {
+                    await shop.Logo.CopyToAsync(fileStream);
+                }
+            }
 
             using (SqlConnection connection = new SqlConnection(_connectionString))
             {
@@ -36,31 +55,29 @@ namespace YourProjectNamespace.Controllers
                     {
                         command.CommandType = CommandType.StoredProcedure;
 
-                        // Add parameters
                         command.Parameters.AddWithValue("@shop_name", shop.ShopName);
                         command.Parameters.AddWithValue("@description", shop.Description ?? (object)DBNull.Value);
+                        command.Parameters.AddWithValue("@logo", logoFilePath ?? (object)DBNull.Value);
                         command.Parameters.AddWithValue("@contact_info", shop.ContactInfo ?? (object)DBNull.Value);
                         command.Parameters.AddWithValue("@creator_id", shop.CreatorId);
 
-                        // Execute the command
                         await command.ExecuteNonQueryAsync();
                     }
                 }
                 catch (SqlException ex)
                 {
-                    if (ex.Number == 50000) // Custom error raised by RAISERROR in the stored procedure
-                    {
+                    if (ex.Number == 50000) // Custom error thrown by RAISERROR
                         return BadRequest(new { message = ex.Message });
-                    }
-                    else
-                    {
-                        return StatusCode(500, new { message = "An error occurred while creating the shop.", error = ex.Message });
-                    }
+
+                    return StatusCode(500, new { message = "An error occurred.", error = ex.Message });
                 }
             }
 
             return Ok(new { message = "Shop created successfully." });
         }
+
+
+
         [HttpPut("EditShop")]
         public async Task<IActionResult> EditShop([FromBody] ShopRequest shop)
         {
@@ -137,61 +154,61 @@ namespace YourProjectNamespace.Controllers
         }
 
 
-        [HttpGet("GetShop/{shopId?}")]
-        public async Task<IActionResult> GetShop(int? shopId)
-        {
-            try
-            {
-                using (SqlConnection conn = new SqlConnection(_connectionString))
-                {
-                    await conn.OpenAsync();
+        //[HttpGet("GetShop/{shopId?}")]
+        //public async Task<IActionResult> GetShop(int? shopId)
+        //{
+        //    try
+        //    {
+        //        using (SqlConnection conn = new SqlConnection(_connectionString))
+        //        {
+        //            await conn.OpenAsync();
 
-                    using (SqlCommand cmd = new SqlCommand("GetShopDetails", conn))
-                    {
-                        cmd.CommandType = CommandType.StoredProcedure;
+        //            using (SqlCommand cmd = new SqlCommand("GetShopDetails", conn))
+        //            {
+        //                cmd.CommandType = CommandType.StoredProcedure;
 
-                        // Pass shop_id parameter if provided
-                        if (shopId.HasValue)
-                        {
-                            cmd.Parameters.AddWithValue("@shop_id", shopId.Value);
-                        }
-                        else
-                        {
-                            cmd.Parameters.AddWithValue("@shop_id", DBNull.Value); // Fetch all shops
-                        }
+        //                // Pass shop_id parameter if provided
+        //                if (shopId.HasValue)
+        //                {
+        //                    cmd.Parameters.AddWithValue("@shop_id", shopId.Value);
+        //                }
+        //                else
+        //                {
+        //                    cmd.Parameters.AddWithValue("@shop_id", DBNull.Value); // Fetch all shops
+        //                }
 
-                        var reader = await cmd.ExecuteReaderAsync();
-                        var shops = new List<ShopRequest>();
+        //                var reader = await cmd.ExecuteReaderAsync();
+        //                var shops = new List<ShopRequest>();
 
-                        while (await reader.ReadAsync())
-                        {
-                            shops.Add(new ShopRequest
-                            {
-                                ShopId = (int)reader["shop_id"],
-                                ShopName = reader["shop_name"]?.ToString(),
-                                Description = reader["description"]?.ToString(),
-                                ContactInfo = reader["contact_info"]?.ToString(),
-                                Logo = reader["logo"]?.ToString(),
-                                CreatedAt = (DateTime)reader["created_at"]
-                            });
-                        }
-                        if (shops.Count == 0)
-                        {
-                            return NotFound("No shops found.");
-                        }
-                        return Ok(shops);
-                    }
-                }
-            }
-            catch (SqlException ex)
-            {
-                return StatusCode(500, $"SQL error: {ex.Message}");
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, $"Internal server error: {ex.Message}");
-            }
-        }
+        //                while (await reader.ReadAsync())
+        //                {
+        //                    shops.Add(new ShopRequest
+        //                    {
+        //                        ShopId = (int)reader["shop_id"],
+        //                        ShopName = reader["shop_name"]?.ToString(),
+        //                        Description = reader["description"]?.ToString(),
+        //                        ContactInfo = reader["contact_info"]?.ToString(),
+        //                        Logo = reader["logo"]?.ToString(),
+        //                        CreatedAt = (DateTime)reader["created_at"]
+        //                    });
+        //                }
+        //                if (shops.Count == 0)
+        //                {
+        //                    return NotFound("No shops found.");
+        //                }
+        //                return Ok(shops);
+        //            }
+        //        }
+        //    }
+        //    catch (SqlException ex)
+        //    {
+        //        return StatusCode(500, $"SQL error: {ex.Message}");
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        return StatusCode(500, $"Internal server error: {ex.Message}");
+        //    }
+        //}
 
         [HttpGet]
         public async Task<IActionResult> GetShops()
