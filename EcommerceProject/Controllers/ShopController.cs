@@ -154,61 +154,34 @@ namespace YourProjectNamespace.Controllers
         }
 
 
-        //[HttpGet("GetShop/{shopId?}")]
-        //public async Task<IActionResult> GetShop(int? shopId)
-        //{
-        //    try
-        //    {
-        //        using (SqlConnection conn = new SqlConnection(_connectionString))
-        //        {
-        //            await conn.OpenAsync();
+        [HttpGet("GetShopDetails/{shopId}")]
+        public async Task<IActionResult> GetShopDetails(int shopId)
+        {
+            try
+            {
+                var shop = await _context.Shops
+                    .Where(s => s.ShopId == shopId && s.DeletedFlag == false)
+                    .Select(s => new
+                    {
+                        s.ShopId,
+                        s.ShopName,
+                        s.Description,
+                        s.ContactInfo,
+                        s.Logo,
+                        s.CreatedAt
+                    }).FirstOrDefaultAsync();
 
-        //            using (SqlCommand cmd = new SqlCommand("GetShopDetails", conn))
-        //            {
-        //                cmd.CommandType = CommandType.StoredProcedure;
+                if (shop == null)
+                    return NotFound("Shop not found");
 
-        //                // Pass shop_id parameter if provided
-        //                if (shopId.HasValue)
-        //                {
-        //                    cmd.Parameters.AddWithValue("@shop_id", shopId.Value);
-        //                }
-        //                else
-        //                {
-        //                    cmd.Parameters.AddWithValue("@shop_id", DBNull.Value); // Fetch all shops
-        //                }
+                return Ok(shop);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { error = ex.Message });
+            }
+        }
 
-        //                var reader = await cmd.ExecuteReaderAsync();
-        //                var shops = new List<ShopRequest>();
-
-        //                while (await reader.ReadAsync())
-        //                {
-        //                    shops.Add(new ShopRequest
-        //                    {
-        //                        ShopId = (int)reader["shop_id"],
-        //                        ShopName = reader["shop_name"]?.ToString(),
-        //                        Description = reader["description"]?.ToString(),
-        //                        ContactInfo = reader["contact_info"]?.ToString(),
-        //                        Logo = reader["logo"]?.ToString(),
-        //                        CreatedAt = (DateTime)reader["created_at"]
-        //                    });
-        //                }
-        //                if (shops.Count == 0)
-        //                {
-        //                    return NotFound("No shops found.");
-        //                }
-        //                return Ok(shops);
-        //            }
-        //        }
-        //    }
-        //    catch (SqlException ex)
-        //    {
-        //        return StatusCode(500, $"SQL error: {ex.Message}");
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        return StatusCode(500, $"Internal server error: {ex.Message}");
-        //    }
-        //}
 
         [HttpGet]
         public async Task<IActionResult> GetShops()
