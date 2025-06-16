@@ -102,7 +102,7 @@ namespace EcommerceProject.Controllers
                                 return Unauthorized("This shop is deactivated. Contact support.");
                             }
 
-                            string token = GenerateJwtToken(userId, username, role);
+                            string token = GenerateJwtToken(userId, username, role, request.RememberMe);
 
                             return Ok(new
                             {
@@ -180,30 +180,45 @@ namespace EcommerceProject.Controllers
         }
 
 
-        private string GenerateJwtToken(int userId, string username, string role) //Jwt method
+
+
+        private string GenerateJwtToken(int userId, string username, string role, bool rememberMe = false)
         {
-            string jwtKey = _configuration["Jwt:Key"];
+            // Validate configuration
+            var jwtConfig = _configuration.GetSection("Jwt");
+            string jwtKey = jwtConfig["Key"];
+            string issuer = jwtConfig["Issuer"];
+            string audience = jwtConfig["Audience"];
 
             if (string.IsNullOrEmpty(jwtKey))
             {
-                throw new ArgumentNullException("Jwt:Key is missing in appsettings.json.");
+                throw new ApplicationException("JWT configuration is incomplete. Please check appsettings.json.");
             }
 
+            // Create security key and credentials
             var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));
             var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
 
+            // Configure token claims
             var claims = new[]
             {
         new Claim(JwtRegisteredClaimNames.Sub, username),
+        new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
         new Claim("UserId", userId.ToString()),
         new Claim(ClaimTypes.Role, role)
     };
 
+            // Set token expiration based on Remember Me
+            var tokenExpiry = rememberMe
+                ? DateTime.UtcNow.AddDays(Convert.ToInt32(jwtConfig["RememberMeTokenExpiryDays"] ?? "30"))
+                : DateTime.UtcNow.AddHours(Convert.ToInt32(jwtConfig["NormalTokenExpiryHours"] ?? "2"));
+
+            // Generate token
             var token = new JwtSecurityToken(
-                issuer: _configuration["Jwt:Issuer"],
-                audience: _configuration["Jwt:Audience"],
+                issuer: issuer,
+                audience: audience,
                 claims: claims,
-                expires: DateTime.UtcNow.AddHours(2),
+                expires: tokenExpiry,
                 signingCredentials: credentials
             );
 
