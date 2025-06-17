@@ -22,49 +22,6 @@ namespace EcommerceProject.Controllers
             _connectionString = configuration.GetConnectionString("DevDB");
         }
 
-        //[HttpPost("Login")]
-        //public async Task<IActionResult> Login([FromBody] LoginRequest request)
-        //{
-        //    if (string.IsNullOrEmpty(request.Email) || string.IsNullOrEmpty(request.Password))
-        //    {
-        //        return BadRequest("Email and Password are required.");
-        //    }
-
-        //    using (SqlConnection conn = new SqlConnection(_connectionString))
-        //    {
-        //        await conn.OpenAsync();
-
-        //        using (SqlCommand cmd = new SqlCommand("UserLogin", conn))
-        //        {
-        //            cmd.CommandType = System.Data.CommandType.StoredProcedure;
-        //            cmd.Parameters.AddWithValue("@Email", request.Email);
-        //            cmd.Parameters.AddWithValue("@Password", request.Password);
-
-        //            using (SqlDataReader reader = await cmd.ExecuteReaderAsync())
-        //            {
-        //                if (await reader.ReadAsync())
-        //                {
-        //                    int userId = reader.GetInt32(0);
-        //                    string username = reader.GetString(1);
-        //                    string role = reader.GetString(2);
-        //                    bool shopDeletedFlag = reader.GetBoolean(reader.GetOrdinal("deleted_flag"));
-
-        //                    if (shopDeletedFlag) // BIT values are true/false
-        //                    {
-        //                        return Unauthorized("This shop is deactivated. Contact support.");
-        //                    }
-
-        //                    string token = GenerateJwtToken(userId, username, role);
-        //                    return Ok(new { Token = token, Username = username, Role = role });
-        //                }
-
-        //            }
-        //        }
-        //    }
-
-        //    return Unauthorized("Invalid email or password.");
-        //}
-
         [HttpPost("Login")]
         public async Task<IActionResult> Login([FromBody] LoginRequest request)
         {

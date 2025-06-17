@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using EcommerceProject.Services;
 using Microsoft.Extensions.FileProviders;
+using Microsoft.AspNetCore.StaticFiles;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -60,14 +61,22 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
-app.UseStaticFiles();
+//app.UseStaticFiles();
 
 //app.UseStaticFiles(new StaticFileOptions
 //{
 //    FileProvider = new PhysicalFileProvider(
-//        Path.Combine(Directory.GetCurrentDirectory(), "Uploads")),
+//        Path.Combine(builder.Environment.ContentRootPath, "wwwroot", "uploads")),
 //    RequestPath = "/uploads"
 //});
+//app.UseStaticFiles(); // basic static files
+
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(
+        Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads")),
+    RequestPath = "/uploads"
+});
 
 
 app.UseHttpsRedirection();
