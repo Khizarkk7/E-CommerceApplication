@@ -12,6 +12,7 @@ namespace YourProjectNamespace.Controllers
     {
         private readonly AppDbContext _context;
         private readonly string _connectionString;
+        private readonly ILogger<ShopController> _logger;
 
 
         public ShopController(AppDbContext context, IConfiguration configuration)
@@ -79,46 +80,184 @@ namespace YourProjectNamespace.Controllers
 
 
         [HttpPut("EditShop")]
-        public async Task<IActionResult> EditShop([FromBody] ShopRequest shop)
+        public async Task<IActionResult> EditShop([FromForm] ShopRequest shop)
         {
             if (shop == null || shop.ShopId <= 0)
-                return BadRequest("Valid shop details are required.");
+            {
+                return BadRequest(new { success = false, message = "Valid shop details are required" });
+            }
+
+            string newLogoPath = null;
+            string oldLogoPath = null;
+            string uploadsFolder = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads");
 
             using (SqlConnection connection = new SqlConnection(_connectionString))
             {
-                try
-                {
-                    await connection.OpenAsync();
-                    using (SqlCommand command = new SqlCommand("EditShop", connection))
-                    {
-                        command.CommandType = CommandType.StoredProcedure;
+                await connection.OpenAsync();
 
-                        // Add parameters
-                        command.Parameters.AddWithValue("@shop_id", shop.ShopId);
-                        command.Parameters.AddWithValue("@shop_name", shop.ShopName);
-                        command.Parameters.AddWithValue("@description", shop.Description ?? (object)DBNull.Value);
-                        command.Parameters.AddWithValue("@contact_info", shop.ContactInfo ?? (object)DBNull.Value);
-                        command.Parameters.AddWithValue("@creator_id", shop.CreatorId);
-
-                        // Execute the command
-                        await command.ExecuteNonQueryAsync();
-                    }
-                }
-                catch (SqlException ex)
+                using (var transaction = connection.BeginTransaction())
                 {
-                    if (ex.Number == 50000) // Custom error raised by RAISERROR in the stored procedure
+                    try
                     {
-                        return BadRequest(new { message = ex.Message });
+                        // Handle logo upload if new file provided
+                        if (shop.Logo != null && shop.Logo.Length > 0)
+                        {
+                            try
+                            {
+                                if (!Directory.Exists(uploadsFolder))
+                                {
+                                    Directory.CreateDirectory(uploadsFolder);
+                                }
+
+                                var uniqueFileName = $"{Guid.NewGuid()}_{Path.GetFileName(shop.Logo.FileName)}";
+                                newLogoPath = Path.Combine("uploads", uniqueFileName);
+                                var fullPath = Path.Combine(uploadsFolder, uniqueFileName);
+
+                                using (var fileStream = new FileStream(fullPath, FileMode.Create))
+                                {
+                                    await shop.Logo.CopyToAsync(fileStream);
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                return StatusCode(500, new
+                                {
+                                    success = false,
+                                    message = "Failed to upload logo file",
+                                    error = ex.Message
+                                });
+                            }
+                        }
+
+                        // Execute stored procedure
+                        using (var command = new SqlCommand("EditShop", connection, transaction))
+                        {
+                            command.CommandType = CommandType.StoredProcedure;
+
+                            command.Parameters.AddWithValue("@shop_id", shop.ShopId);
+                            command.Parameters.AddWithValue("@shop_name", shop.ShopName);
+                            command.Parameters.AddWithValue("@description",
+                                string.IsNullOrWhiteSpace(shop.Description) ? (object)DBNull.Value : shop.Description);
+                            command.Parameters.AddWithValue("@contact_info",
+                                string.IsNullOrWhiteSpace(shop.ContactInfo) ? (object)DBNull.Value : shop.ContactInfo);
+                            command.Parameters.AddWithValue("@logo",
+                                string.IsNullOrWhiteSpace(newLogoPath) ? (object)DBNull.Value : newLogoPath);
+                            command.Parameters.AddWithValue("@creator_id", shop.CreatorId);
+
+                            using (var reader = await command.ExecuteReaderAsync())
+                            {
+                                if (reader.Read())
+                                {
+                                    oldLogoPath = reader.IsDBNull(0) ? null : reader.GetString(0);
+                                }
+                            }
+                        }
+
+                        // Clean up old logo if new one was uploaded
+                        if (!string.IsNullOrEmpty(newLogoPath) && !string.IsNullOrEmpty(oldLogoPath))
+                        {
+                            try
+                            {
+                                var oldFullPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", oldLogoPath);
+                                if (System.IO.File.Exists(oldFullPath))
+                                {
+                                    System.IO.File.Delete(oldFullPath);
+                                }
+                            }
+                            catch (IOException ex)
+                            {
+                                // Log the error but don't fail the operation
+                                _logger.LogWarning(ex, "Failed to delete old logo file: {OldLogoPath}", oldLogoPath);
+                            }
+                        }
+
+                        await transaction.CommitAsync();
+                        return Ok(new { success = true, message = "Shop updated successfully" });
                     }
-                    else
+                    catch (SqlException ex) when (ex.Number == 50000)
                     {
-                        return StatusCode(500, new { message = "An error occurred while updating the shop.", error = ex.Message });
+                        await transaction.RollbackAsync();
+                        CleanupFile(newLogoPath);
+                        return BadRequest(new { success = false, message = ex.Message });
+                    }
+                    catch (Exception ex)
+                    {
+                        await transaction.RollbackAsync();
+                        CleanupFile(newLogoPath);
+                        return StatusCode(500, new
+                        {
+                            success = false,
+                            message = "An error occurred while updating the shop",
+                            error = ex.Message
+                        });
                     }
                 }
             }
-
-            return Ok(new { message = "Shop updated successfully." });
         }
+
+        private void CleanupFile(string filePath)
+        {
+            if (!string.IsNullOrEmpty(filePath))
+            {
+                try
+                {
+                    var fullPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", filePath);
+                    if (System.IO.File.Exists(fullPath))
+                    {
+                        System.IO.File.Delete(fullPath);
+                    }
+                }
+                catch (IOException ex)
+                {
+                    _logger.LogWarning(ex, "Failed to cleanup file: {FilePath}", filePath);
+                }
+            }
+        }
+
+
+
+
+        //[HttpPut("EditShop")]
+        //public async Task<IActionResult> EditShop([FromForm] ShopRequest shop)
+        //{
+        //    if (shop == null || shop.ShopId <= 0)
+        //        return BadRequest("Valid shop details are required.");
+
+        //    using (SqlConnection connection = new SqlConnection(_connectionString))
+        //    {
+        //        try
+        //        {
+        //            await connection.OpenAsync();
+        //            using (SqlCommand command = new SqlCommand("EditShop", connection))
+        //            {
+        //                command.CommandType = CommandType.StoredProcedure;
+
+        //                // Add parameters
+        //                command.Parameters.AddWithValue("@shop_id", shop.ShopId);
+        //                command.Parameters.AddWithValue("@shop_name", shop.ShopName);
+        //                command.Parameters.AddWithValue("@description", shop.Description ?? (object)DBNull.Value);
+        //                command.Parameters.AddWithValue("@contact_info", shop.ContactInfo ?? (object)DBNull.Value);
+        //                command.Parameters.AddWithValue("@creator_id", shop.CreatorId);
+
+        //                // Execute the command
+        //                await command.ExecuteNonQueryAsync();
+        //            }
+        //        }
+        //        catch (SqlException ex)
+        //        {
+        //            if (ex.Number == 50000) // Custom error raised by RAISERROR in the stored procedure
+        //            {
+        //                return BadRequest(new { message = ex.Message });
+        //            }
+        //            else
+        //            {
+        //                return StatusCode(500, new { message = "An error occurred while updating the shop.", error = ex.Message });
+        //            }
+        //        }
+        //    }
+
+        //    return Ok(new { message = "Shop updated successfully." });
+        //}
 
         // Soft delete shop and associated users
         [HttpPut("SoftDeleteShop/{shopId}")]
@@ -227,6 +366,10 @@ namespace YourProjectNamespace.Controllers
                 return StatusCode(500, new { message = "An error occurred while retrieving shops.", error = ex.Message });
             }
         }
+
+
+
+
 
 
 
