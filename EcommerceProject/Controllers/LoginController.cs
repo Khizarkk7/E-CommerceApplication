@@ -59,7 +59,7 @@ namespace EcommerceProject.Controllers
                                 return Unauthorized("This shop is deactivated. Contact support.");
                             }
 
-                            string token = GenerateJwtToken(userId, username, role, request.RememberMe);
+                            string token = GenerateJwtToken(userId, username, role, shopId, shopName, request.RememberMe);
 
                             return Ok(new
                             {
@@ -139,7 +139,7 @@ namespace EcommerceProject.Controllers
 
 
 
-        private string GenerateJwtToken(int userId, string username, string role, bool rememberMe = false)
+        private string GenerateJwtToken(int userId, string username, string role, int? shopId, string shopName, bool rememberMe = false)
         {
             // Validate configuration
             var jwtConfig = _configuration.GetSection("Jwt");
@@ -162,7 +162,9 @@ namespace EcommerceProject.Controllers
         new Claim(JwtRegisteredClaimNames.Sub, username),
         new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
         new Claim("UserId", userId.ToString()),
-        new Claim(ClaimTypes.Role, role)
+        new Claim(ClaimTypes.Role, role),
+        new Claim("shopId", shopId?.ToString() ?? ""),
+        new Claim("shopName", shopName ?? "")
     };
 
             // Set token expiration based on Remember Me
