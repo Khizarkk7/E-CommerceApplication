@@ -7,6 +7,7 @@ using Microsoft.IdentityModel.Tokens;
 using EcommerceProject.Services;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.AspNetCore.StaticFiles;
+using System.Security.Claims;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -29,7 +30,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateAudience = false,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(key)
+            IssuerSigningKey = new SymmetricSecurityKey(key),
+            RoleClaimType = ClaimTypes.Role
         };
     });
 
@@ -47,6 +49,18 @@ builder.Services.AddCors(options =>
     });
 });
 
+//Role-Based Policies
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("SystemAdminPolicy", policy => policy.RequireRole("systemAdmin"));
+    options.AddPolicy("ShopAdminPolicy", policy => policy.RequireRole("shopAdmin"));
+    options.AddPolicy("BrandManagerPolicy", policy => policy.RequireRole("brandManager"));
+    options.AddPolicy("ProductManagerPolicy", policy => policy.RequireRole("productManager"));
+    options.AddPolicy("StockManagerPolicy", policy => policy.RequireRole("stockManager"));
+    options.AddPolicy("ShopEmployeePolicy", policy => policy.RequireRole("shopEmployee"));
+});
+
+
 
 // swagger  for testing Apis
 builder.Services.AddEndpointsApiExplorer();
@@ -61,15 +75,6 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
-//app.UseStaticFiles();
-
-//app.UseStaticFiles(new StaticFileOptions
-//{
-//    FileProvider = new PhysicalFileProvider(
-//        Path.Combine(builder.Environment.ContentRootPath, "wwwroot", "uploads")),
-//    RequestPath = "/uploads"
-//});
-//app.UseStaticFiles(); // basic static files
 
 app.UseStaticFiles(new StaticFileOptions
 {

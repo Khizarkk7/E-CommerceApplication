@@ -6,6 +6,7 @@ using System.Security.Claims;
 using System.Text;
 using System.Threading.Tasks;
 using EcommerceProject.Models;
+using System.Data;
 
 namespace EcommerceProject.Controllers
 {
@@ -22,6 +23,63 @@ namespace EcommerceProject.Controllers
             _connectionString = configuration.GetConnectionString("DevDB");
         }
 
+        //[HttpPost("Login")]
+        //public async Task<IActionResult> Login([FromBody] LoginRequest request)
+        //{
+        //    if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password))
+        //    {
+        //        return BadRequest("Email and Password are required.");
+        //    }
+
+        //    using (SqlConnection conn = new SqlConnection(_connectionString))
+        //    {
+        //        await conn.OpenAsync();
+
+        //        using (SqlCommand cmd = new SqlCommand("UserLogin", conn))
+        //        {
+        //            cmd.CommandType = System.Data.CommandType.StoredProcedure;
+        //            cmd.Parameters.AddWithValue("@Email", request.Email.Trim());
+        //            cmd.Parameters.AddWithValue("@Password", request.Password.Trim());
+
+        //            using (SqlDataReader reader = await cmd.ExecuteReaderAsync())
+        //            {
+        //                if (await reader.ReadAsync())
+        //                {
+        //                    int userId = reader.GetInt32(0);
+        //                    string username = reader.GetString(1);
+        //                    string role = reader.GetString(2);
+
+        //                    object shopIdObj = reader["shop_id"];
+        //                    int? shopId = shopIdObj != DBNull.Value ? Convert.ToInt32(shopIdObj) : (int?)null;
+        //                    string shopName = reader["shop_name"] != DBNull.Value ? reader["shop_name"].ToString() : null;
+
+        //                    bool shopDeletedFlag = reader.GetBoolean(reader.GetOrdinal("deleted_flag"));
+
+        //                    if (role == "shopAdmin" && shopDeletedFlag)
+        //                    {
+        //                        return Unauthorized("This shop is deactivated. Contact support.");
+        //                    }
+
+        //                    string token = GenerateJwtToken(userId, username, role, shopId, shopName, request.RememberMe);
+
+        //                    return Ok(new
+        //                    {
+        //                        token,
+        //                        username,
+        //                        role,
+        //                        shopId,
+        //                        shopName
+
+        //                    });
+        //                }
+        //            }
+        //        }
+        //    }
+
+        //    return Unauthorized("Invalid email or password.");
+        //}
+
+
         [HttpPost("Login")]
         public async Task<IActionResult> Login([FromBody] LoginRequest request)
         {
@@ -30,37 +88,42 @@ namespace EcommerceProject.Controllers
                 return BadRequest("Email and Password are required.");
             }
 
-            using (SqlConnection conn = new SqlConnection(_connectionString))
+            using (var conn = new SqlConnection(_connectionString))
             {
                 await conn.OpenAsync();
 
-                using (SqlCommand cmd = new SqlCommand("UserLogin", conn))
+                using (var cmd = new SqlCommand("UserLogin", conn))
                 {
-                    cmd.CommandType = System.Data.CommandType.StoredProcedure;
+                    cmd.CommandType = CommandType.StoredProcedure;
                     cmd.Parameters.AddWithValue("@Email", request.Email.Trim());
                     cmd.Parameters.AddWithValue("@Password", request.Password.Trim());
 
-                    using (SqlDataReader reader = await cmd.ExecuteReaderAsync())
+                    using (var reader = await cmd.ExecuteReaderAsync())
                     {
                         if (await reader.ReadAsync())
                         {
-                            int userId = reader.GetInt32(0);
-                            string username = reader.GetString(1);
-                            string role = reader.GetString(2);
+                            //  Read user info
+                            int userId = reader.GetInt32(reader.GetOrdinal("user_id"));
+                            string username = reader.GetString(reader.GetOrdinal("username"));
+                            string role = reader.GetString(reader.GetOrdinal("role"));
+
 
                             object shopIdObj = reader["shop_id"];
                             int? shopId = shopIdObj != DBNull.Value ? Convert.ToInt32(shopIdObj) : (int?)null;
+
                             string shopName = reader["shop_name"] != DBNull.Value ? reader["shop_name"].ToString() : null;
+                            bool deletedFlag = reader.GetBoolean(reader.GetOrdinal("deleted_flag"));
 
-                            bool shopDeletedFlag = reader.GetBoolean(reader.GetOrdinal("deleted_flag"));
-
-                            if (role == "shopAdmin" && shopDeletedFlag)
+                            //  If shop is deleted and user is shopAdmin, reject login
+                            if (role == "shopAdmin" && deletedFlag)
                             {
-                                return Unauthorized("This shop is deactivated. Contact support.");
+                                return Unauthorized("This shop is deactivated. Please contact support.");
                             }
 
+                            // Generate JWT token with role
                             string token = GenerateJwtToken(userId, username, role, shopId, shopName, request.RememberMe);
 
+                            //  Return token and user info
                             return Ok(new
                             {
                                 token,
@@ -68,7 +131,6 @@ namespace EcommerceProject.Controllers
                                 role,
                                 shopId,
                                 shopName
-
                             });
                         }
                     }
@@ -139,9 +201,55 @@ namespace EcommerceProject.Controllers
 
 
 
+        //    private string GenerateJwtToken(int userId, string username, string role, int? shopId, string shopName, bool rememberMe = false)
+        //    {
+        //        // Validate configuration
+        //        var jwtConfig = _configuration.GetSection("Jwt");
+        //        string jwtKey = jwtConfig["Key"];
+        //        string issuer = jwtConfig["Issuer"];
+        //        string audience = jwtConfig["Audience"];
+
+        //        if (string.IsNullOrEmpty(jwtKey))
+        //        {
+        //            throw new ApplicationException("JWT configuration is incomplete. Please check appsettings.json.");
+        //        }
+
+        //        // Create security key and credentials
+        //        var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));
+        //        var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
+
+        //        // Configure token claims
+        //        var claims = new[]
+        //        {
+        //    new Claim(JwtRegisteredClaimNames.Sub, username),
+        //    new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+        //    new Claim("UserId", userId.ToString()),
+        //    new Claim(ClaimTypes.Role, role),
+        //    new Claim("shopId", shopId?.ToString() ?? ""),
+        //    new Claim("shopName", shopName ?? "")
+        //};
+
+        //        // Set token expiration based on Remember Me
+        //        var tokenExpiry = rememberMe
+        //            ? DateTime.UtcNow.AddDays(Convert.ToInt32(jwtConfig["RememberMeTokenExpiryDays"] ?? "30"))
+        //            : DateTime.UtcNow.AddHours(Convert.ToInt32(jwtConfig["NormalTokenExpiryHours"] ?? "2"));
+
+        //        // Generate token
+        //        var token = new JwtSecurityToken(
+        //            issuer: issuer,
+        //            audience: audience,
+        //            claims: claims,
+        //            expires: tokenExpiry,
+        //            signingCredentials: credentials
+        //        );
+
+        //        return new JwtSecurityTokenHandler().WriteToken(token);
+        //    }
+
+
         private string GenerateJwtToken(int userId, string username, string role, int? shopId, string shopName, bool rememberMe = false)
         {
-            // Validate configuration
+            // Load JWT configuration from appsettings.json
             var jwtConfig = _configuration.GetSection("Jwt");
             string jwtKey = jwtConfig["Key"];
             string issuer = jwtConfig["Issuer"];
@@ -149,30 +257,31 @@ namespace EcommerceProject.Controllers
 
             if (string.IsNullOrEmpty(jwtKey))
             {
-                throw new ApplicationException("JWT configuration is incomplete. Please check appsettings.json.");
+                throw new ApplicationException("JWT configuration is missing. Please check appsettings.json.");
             }
 
-            // Create security key and credentials
+            // Create signing credentials using the secret key
             var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));
             var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
 
-            // Configure token claims
+            // Define claims
             var claims = new[]
             {
         new Claim(JwtRegisteredClaimNames.Sub, username),
         new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-        new Claim("UserId", userId.ToString()),
-        new Claim(ClaimTypes.Role, role),
-        new Claim("shopId", shopId?.ToString() ?? ""),
-        new Claim("shopName", shopName ?? "")
+        new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
+        new Claim(ClaimTypes.Name, username),
+        new Claim(ClaimTypes.Role, role), // Essential for Role-Based Authorization
+        new Claim("shopId", shopId?.ToString() ?? string.Empty),
+        new Claim("shopName", shopName ?? string.Empty)
     };
 
-            // Set token expiration based on Remember Me
+            // Set token expiration time
             var tokenExpiry = rememberMe
                 ? DateTime.UtcNow.AddDays(Convert.ToInt32(jwtConfig["RememberMeTokenExpiryDays"] ?? "30"))
                 : DateTime.UtcNow.AddHours(Convert.ToInt32(jwtConfig["NormalTokenExpiryHours"] ?? "2"));
 
-            // Generate token
+            // Create JWT token
             var token = new JwtSecurityToken(
                 issuer: issuer,
                 audience: audience,
@@ -183,6 +292,8 @@ namespace EcommerceProject.Controllers
 
             return new JwtSecurityTokenHandler().WriteToken(token);
         }
+
+
 
     }
 }

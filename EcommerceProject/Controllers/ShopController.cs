@@ -3,6 +3,7 @@ using System.Data;
 using System.Data.SqlClient;
 using EcommerceProject.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authorization;
 
 namespace YourProjectNamespace.Controllers
 {
@@ -21,7 +22,10 @@ namespace YourProjectNamespace.Controllers
             _connectionString = configuration.GetConnectionString("DevDB");
         }
 
+
+
         // POST: api/Shop/CreateShop
+        [Authorize(Roles = "systemAdmin")]
         [HttpPost("CreateShop")]
         public async Task<IActionResult> CreateShop([FromForm] ShopRequest shop)
         {
