@@ -18,22 +18,31 @@ builder.Services.AddControllers();
     options.UseSqlServer(builder.Configuration.GetConnectionString("DevDB")));
 
 // JWT Key (Secure it in environment variables in production)
-var key = Encoding.UTF8.GetBytes("MySuperSecretKey");
+//var key = Encoding.UTF8.GetBytes("MySuperSecretKey");
 
-// JWT Authentication Setup
+var jwtKey = builder.Configuration.GetSection("Jwt")["Key"];
+var issuer = builder.Configuration.GetSection("Jwt")["Issuer"];
+var audience = builder.Configuration.GetSection("Jwt")["Audience"];
+
+var key = Encoding.UTF8.GetBytes(jwtKey);
+
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
         options.TokenValidationParameters = new TokenValidationParameters
         {
-            ValidateIssuer = false,
-            ValidateAudience = false,
+            ValidateIssuer = true,
+            ValidateAudience = true,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
+
+            ValidIssuer = issuer,
+            ValidAudience = audience,
             IssuerSigningKey = new SymmetricSecurityKey(key),
             RoleClaimType = ClaimTypes.Role
         };
     });
+
 
 builder.Services.Configure<EmailSettings>(builder.Configuration.GetSection("EmailSettings"));
 builder.Services.AddTransient<IEmailService, EmailService>();

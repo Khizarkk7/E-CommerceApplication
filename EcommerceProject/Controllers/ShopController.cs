@@ -221,49 +221,7 @@ namespace YourProjectNamespace.Controllers
 
 
 
-        //[HttpPut("EditShop")]
-        //public async Task<IActionResult> EditShop([FromForm] ShopRequest shop)
-        //{
-        //    if (shop == null || shop.ShopId <= 0)
-        //        return BadRequest("Valid shop details are required.");
-
-        //    using (SqlConnection connection = new SqlConnection(_connectionString))
-        //    {
-        //        try
-        //        {
-        //            await connection.OpenAsync();
-        //            using (SqlCommand command = new SqlCommand("EditShop", connection))
-        //            {
-        //                command.CommandType = CommandType.StoredProcedure;
-
-        //                // Add parameters
-        //                command.Parameters.AddWithValue("@shop_id", shop.ShopId);
-        //                command.Parameters.AddWithValue("@shop_name", shop.ShopName);
-        //                command.Parameters.AddWithValue("@description", shop.Description ?? (object)DBNull.Value);
-        //                command.Parameters.AddWithValue("@contact_info", shop.ContactInfo ?? (object)DBNull.Value);
-        //                command.Parameters.AddWithValue("@creator_id", shop.CreatorId);
-
-        //                // Execute the command
-        //                await command.ExecuteNonQueryAsync();
-        //            }
-        //        }
-        //        catch (SqlException ex)
-        //        {
-        //            if (ex.Number == 50000) // Custom error raised by RAISERROR in the stored procedure
-        //            {
-        //                return BadRequest(new { message = ex.Message });
-        //            }
-        //            else
-        //            {
-        //                return StatusCode(500, new { message = "An error occurred while updating the shop.", error = ex.Message });
-        //            }
-        //        }
-        //    }
-
-        //    return Ok(new { message = "Shop updated successfully." });
-        //}
-
-        // Soft delete shop and associated users
+        
         [HttpPut("SoftDeleteShop/{shopId}")]
         public async Task<IActionResult> SoftDeleteShop(int shopId, [FromQuery] int adminId)
         {
