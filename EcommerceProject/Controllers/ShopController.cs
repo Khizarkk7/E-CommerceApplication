@@ -82,7 +82,7 @@ namespace YourProjectNamespace.Controllers
         }
 
 
-
+        
         [HttpPut("EditShop")]
         public async Task<IActionResult> EditShop([FromForm] ShopRequest shop)
         {
@@ -221,7 +221,7 @@ namespace YourProjectNamespace.Controllers
 
 
 
-        
+        [Authorize(Roles = "systemAdmin")]
         [HttpPut("SoftDeleteShop/{shopId}")]
         public async Task<IActionResult> SoftDeleteShop(int shopId, [FromQuery] int adminId)
         {
@@ -254,7 +254,7 @@ namespace YourProjectNamespace.Controllers
             }
         }
 
-
+        [Authorize(Roles = "systemAdmin")]
         [HttpGet("GetShopDetails/{shopId}")]
         public async Task<IActionResult> GetShopDetails(int shopId)
         {

@@ -51,7 +51,7 @@ namespace EcommerceProject.Controllers
                         {
                             int userId = reader.GetInt32(reader.GetOrdinal("user_id"));
                             string username = reader.GetString(reader.GetOrdinal("username"));
-                            int roleId = reader.GetInt32(reader.GetOrdinal("role_id")); // <-- read role_id
+                            int roleId = reader.GetInt32(reader.GetOrdinal("role_id")); 
                             string role = reader.GetString(reader.GetOrdinal("role"));
 
                             object shopIdObj = reader["shop_id"];
