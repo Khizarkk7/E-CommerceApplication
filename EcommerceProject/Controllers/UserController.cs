@@ -7,6 +7,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+using Microsoft.AspNetCore.Authorization;
 
 
 namespace EcommerceProject.Controllers
@@ -25,9 +26,9 @@ namespace EcommerceProject.Controllers
             _connectionString = configuration.GetConnectionString("DevDB");
         }
 
-
+       // [Authorize(Roles = "systemAdmin")]
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<User>>> GetUsers()
+        public async Task<ActionResult<IEnumerable<UserRequest>>> GetUsers()
         {
             var users = await _context.Users.ToListAsync();
             return Ok(users);
@@ -48,7 +49,7 @@ namespace EcommerceProject.Controllers
             return Ok(user);
         }
 
-
+        [Authorize(Roles = "systemAdmin")]
         [HttpPost("AddUser")]
         public async Task<IActionResult> AddUser([FromBody] UserRequest user)
         {

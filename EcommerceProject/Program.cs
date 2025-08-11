@@ -11,14 +11,46 @@ using System.Security.Claims;
 
 var builder = WebApplication.CreateBuilder(args);
 
+
+// Detect OS
+var isWindows = OperatingSystem.IsWindows();
+
+// Load OS-specific config
+if (isWindows)
+{
+    builder.Configuration.AddJsonFile("appsettings.Windows.json", optional: false);
+}
+else
+{
+    builder.Configuration.AddJsonFile("appsettings.Mac.json", optional: false);
+}
+
 // Add services to the container.
 builder.Services.AddControllers();
-// Database connection setup
-    builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DevDB")));
 
-// JWT Key (Secure it in environment variables in production)
-//var key = Encoding.UTF8.GetBytes("MySuperSecretKey");
+
+// Database connection setup
+//builder.Services.AddDbContext<AppDbContext>(options =>
+//options.UseSqlServer(builder.Configuration.GetConnectionString("DevDB")));
+
+
+// Connection string choose based on OS
+var connectionString = builder.Configuration.GetConnectionString("DevDB");
+
+if (isWindows)
+{
+    builder.Services.AddDbContext<AppDbContext>(options =>
+        options.UseSqlServer(connectionString));
+}
+else
+{
+    //builder.Services.AddDbContext<AppDbContext>(options =>
+      //  options.UseNpgsql(connectionString));
+}
+
+
+
+
 
 var jwtKey = builder.Configuration.GetSection("Jwt")["Key"];
 var issuer = builder.Configuration.GetSection("Jwt")["Issuer"];
