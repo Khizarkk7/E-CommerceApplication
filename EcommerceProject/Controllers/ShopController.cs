@@ -331,6 +331,64 @@ namespace YourProjectNamespace.Controllers
 
 
 
+        //[Authorize(Roles = "systemAdmin")]
+        [HttpPost("CreateShopWithAdmin")]
+        public async Task<IActionResult> CreateShopWithAdmin([FromForm] ShopWithAdminRequest request)
+        {
+            if (request == null)
+                return BadRequest("Details are required.");
+
+            string logoFilePath = null;
+            if (request.Logo != null && request.Logo.Length > 0)
+            {
+                var uploadsFolder = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads");
+                if (!Directory.Exists(uploadsFolder))
+                    Directory.CreateDirectory(uploadsFolder);
+
+                var uniqueFileName = $"{Guid.NewGuid()}_{Path.GetFileName(request.Logo.FileName)}";
+                logoFilePath = Path.Combine("uploads", uniqueFileName);
+                var fullFilePath = Path.Combine(uploadsFolder, uniqueFileName);
+
+                using (var fileStream = new FileStream(fullFilePath, FileMode.Create))
+                {
+                    await request.Logo.CopyToAsync(fileStream);
+                }
+            }
+
+            using (SqlConnection connection = new SqlConnection(_connectionString))
+            {
+                try
+                {
+                    await connection.OpenAsync();
+                    using (SqlCommand command = new SqlCommand("CreateShopWithAdmin", connection))
+                    {
+                        command.CommandType = CommandType.StoredProcedure;
+
+                        command.Parameters.AddWithValue("@ShopName", request.ShopName);
+                        command.Parameters.AddWithValue("@Description", (object?)request.Description ?? DBNull.Value);
+                        command.Parameters.AddWithValue("@Logo", (object?)logoFilePath ?? DBNull.Value);
+                        command.Parameters.AddWithValue("@ContactInfo", (object?)request.ContactInfo ?? DBNull.Value);
+                        command.Parameters.AddWithValue("@CreatorId", request.CreatorId);
+
+                        command.Parameters.AddWithValue("@AdminFullName", request.FullName);
+                        command.Parameters.AddWithValue("@AdminEmail", request.Email);
+                        command.Parameters.AddWithValue("@AdminPassword", request.Password); 
+
+                        await command.ExecuteNonQueryAsync();
+                    }
+
+                    return Ok(new { succeeded = true, message = "Shop and Shop Admin created successfully." });
+                }
+                catch (SqlException ex)
+                {
+                    return StatusCode(500, new { succeeded = false, message = "Error occurred.", error = ex.Message });
+                }
+            }
+        }
+
+
+
+
 
 
 
