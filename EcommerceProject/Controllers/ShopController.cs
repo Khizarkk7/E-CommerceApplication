@@ -331,7 +331,7 @@ namespace YourProjectNamespace.Controllers
 
 
 
-        //[Authorize(Roles = "systemAdmin")]
+        [Authorize(Roles = "systemAdmin")]
         [HttpPost("CreateShopWithAdmin")]
         public async Task<IActionResult> CreateShopWithAdmin([FromForm] ShopWithAdminRequest request)
         {

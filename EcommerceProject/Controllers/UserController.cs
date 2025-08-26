@@ -98,7 +98,9 @@ namespace EcommerceProject.Controllers
             }
         }
 
-        // PUT: api/User/UpdateUser/{userId}
+
+
+       //[Authorize(Roles = "systemAdmin")]
         [HttpPut("UpdateUser/{userId}")]
         public IActionResult UpdateUser(int userId, [FromBody] UserRequest user)
         {
