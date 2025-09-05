@@ -7,8 +7,8 @@
         public string Description { get; set; }
         public string ContactInfo { get; set; }
         public int CreatorId { get; set; }
-        public IFormFile Logo { get; set; }
-        public DateTime CreatedAt { get; set; }
+        public IFormFile? Logo { get; set; }
+        public DateTime? CreatedAt { get; set; }
     }
 
 

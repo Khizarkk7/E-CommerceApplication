@@ -100,7 +100,7 @@ namespace EcommerceProject.Controllers
 
 
 
-       //[Authorize(Roles = "systemAdmin")]
+        [Authorize(Roles = "systemAdmin")]
         [HttpPut("UpdateUser/{userId}")]
         public IActionResult UpdateUser(int userId, [FromBody] UserRequest user)
         {

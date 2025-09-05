@@ -221,7 +221,7 @@ namespace YourProjectNamespace.Controllers
 
 
 
-        [Authorize(Roles = "systemAdmin")]
+       // [Authorize(Roles = "systemAdmin")]
         [HttpPut("SoftDeleteShop/{shopId}")]
         public async Task<IActionResult> SoftDeleteShop(int shopId, [FromQuery] int adminId)
         {
@@ -269,7 +269,8 @@ namespace YourProjectNamespace.Controllers
                         s.Description,
                         s.ContactInfo,
                         s.Logo,
-                        s.CreatedAt
+                        s.CreatedAt,
+                        s.CreatorId
                     }).FirstOrDefaultAsync();
 
                 if (shop == null)
