@@ -1,4 +1,4 @@
-﻿    using EcommerceProject.Models;
+﻿using EcommerceProject.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Data;
@@ -65,7 +65,7 @@ namespace EcommerceProject.Controllers
                     command.Parameters.AddWithValue("@description", string.IsNullOrEmpty(product.Description) ? (object)DBNull.Value : product.Description);
                     command.Parameters.AddWithValue("@price", product.Price ?? (object)DBNull.Value);
                     command.Parameters.AddWithValue("@image_url", (object?)relativePath ?? DBNull.Value);
-                    command.Parameters.AddWithValue("@stock_quantity", product.StockQuantity ?? (object)DBNull.Value);
+                    command.Parameters.AddWithValue("@stock_quantity", product.StockQuantity ?? 0); // now goes into Stock table
                     command.Parameters.AddWithValue("@shop_id", product.ShopId);
 
                     await connection.OpenAsync();
@@ -134,9 +134,9 @@ public async Task<IActionResult> EditProduct(int productId, [FromForm] ProductRe
             cmd.Parameters.AddWithValue("@description", string.IsNullOrEmpty(product.Description) ? (object)DBNull.Value : product.Description);
             cmd.Parameters.AddWithValue("@price", product.Price ?? (object)DBNull.Value);
             cmd.Parameters.AddWithValue("@image_url", (object?)relativePath ?? DBNull.Value); // only new path if uploaded
-            cmd.Parameters.AddWithValue("@stock_quantity", product.StockQuantity ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@stock_quantity", product.StockQuantity.HasValue ? (object)product.StockQuantity.Value : DBNull.Value);
 
-            await conn.OpenAsync();
+                    await conn.OpenAsync();
             var rowsAffected = await cmd.ExecuteNonQueryAsync();
 
             if (rowsAffected == 0)
@@ -154,6 +154,8 @@ public async Task<IActionResult> EditProduct(int productId, [FromForm] ProductRe
         return StatusCode(500, new { error = "Internal server error", details = ex.Message });
     }
 }
+
+
 
 
         [HttpGet("GetProductsByShop/{shopId}")]
@@ -184,7 +186,7 @@ public async Task<IActionResult> EditProduct(int productId, [FromForm] ProductRe
                                  Price = Convert.ToDecimal(reader["price"]),
                                  ImageUrl = reader.IsDBNull(reader.GetOrdinal("image_url"))? null
     :                            $"{Request.Scheme}://{Request.Host}/uploads/products/{Path.GetFileName(reader["image_url"].ToString())}",
-                                 StockQuantity = Convert.ToInt32(reader["stock_quantity"]),
+                                 StockQuantity = Convert.ToInt32(reader["stock_quantity"]), // Stock now from Stock table
                                  CreatedAt = Convert.ToDateTime(reader["created_at"])
                                });
                             }

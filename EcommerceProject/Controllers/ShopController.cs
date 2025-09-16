@@ -5,7 +5,7 @@ using EcommerceProject.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
 
-namespace YourProjectNamespace.Controllers
+namespace EcommerceProject.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
