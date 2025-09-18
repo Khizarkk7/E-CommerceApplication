@@ -23,6 +23,31 @@ namespace EcommerceProject.Controllers
         }
 
 
+        //first create slug for shops
+        private async Task<string> GenerateUniqueSlug(string shopName, SqlConnection connection)
+        {
+            string baseSlug = shopName.ToLower().Replace(" ", "-");
+            string slug = baseSlug;
+            int counter = 1;
+
+            using (SqlCommand cmd = new SqlCommand("SELECT COUNT(*) FROM Shops WHERE slug = @slug", connection))
+            {
+                cmd.Parameters.Add("@slug", SqlDbType.NVarChar, 100);
+
+                while (true)
+                {
+                    cmd.Parameters["@slug"].Value = slug;
+                    int exists = (int)await cmd.ExecuteScalarAsync();
+
+                    if (exists == 0) break; // slug free hai
+                    slug = $"{baseSlug}-{counter}";
+                    counter++;
+                }
+            }
+
+            return slug;
+        }
+
 
         // POST: api/Shop/CreateShop
         [Authorize(Roles = "systemAdmin")]
@@ -34,7 +59,7 @@ namespace EcommerceProject.Controllers
 
             string logoFilePath = null;
 
-            // Upload the logo file
+            // Logo upload
             if (shop.Logo != null && shop.Logo.Length > 0)
             {
                 var uploadsFolder = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads");
@@ -42,8 +67,8 @@ namespace EcommerceProject.Controllers
                     Directory.CreateDirectory(uploadsFolder);
 
                 var uniqueFileName = $"{Guid.NewGuid()}_{Path.GetFileName(shop.Logo.FileName)}";
-                logoFilePath = Path.Combine("uploads", uniqueFileName); // Relative path
-                var fullFilePath = Path.Combine(uploadsFolder, uniqueFileName); // Absolute path
+                logoFilePath = Path.Combine("uploads", uniqueFileName);
+                var fullFilePath = Path.Combine(uploadsFolder, uniqueFileName);
 
                 using (var fileStream = new FileStream(fullFilePath, FileMode.Create))
                 {
@@ -56,6 +81,10 @@ namespace EcommerceProject.Controllers
                 try
                 {
                     await connection.OpenAsync();
+
+                    //  Slug generate 
+                    string slug = await GenerateUniqueSlug(shop.ShopName, connection);
+
                     using (SqlCommand command = new SqlCommand("CreateShop", connection))
                     {
                         command.CommandType = CommandType.StoredProcedure;
@@ -65,13 +94,14 @@ namespace EcommerceProject.Controllers
                         command.Parameters.AddWithValue("@logo", logoFilePath ?? (object)DBNull.Value);
                         command.Parameters.AddWithValue("@contact_info", shop.ContactInfo ?? (object)DBNull.Value);
                         command.Parameters.AddWithValue("@creator_id", shop.CreatorId);
+                        command.Parameters.AddWithValue("@slug", slug); // Slug 
 
                         await command.ExecuteNonQueryAsync();
                     }
                 }
                 catch (SqlException ex)
                 {
-                    if (ex.Number == 50000) // Custom error thrown by RAISERROR
+                    if (ex.Number == 50000) // Custom error from SP
                         return BadRequest(new { message = ex.Message });
 
                     return StatusCode(500, new { message = "An error occurred.", error = ex.Message });
@@ -82,7 +112,9 @@ namespace EcommerceProject.Controllers
         }
 
 
-        
+
+
+
         [HttpPut("EditShop")]
         public async Task<IActionResult> EditShop([FromForm] ShopRequest shop)
         {
@@ -361,6 +393,9 @@ namespace EcommerceProject.Controllers
                 try
                 {
                     await connection.OpenAsync();
+                    // Generate slug before inserting
+                    string slug = await GenerateUniqueSlug(request.ShopName, connection);
+
                     using (SqlCommand command = new SqlCommand("CreateShopWithAdmin", connection))
                     {
                         command.CommandType = CommandType.StoredProcedure;
@@ -370,7 +405,7 @@ namespace EcommerceProject.Controllers
                         command.Parameters.AddWithValue("@Logo", (object?)logoFilePath ?? DBNull.Value);
                         command.Parameters.AddWithValue("@ContactInfo", (object?)request.ContactInfo ?? DBNull.Value);
                         command.Parameters.AddWithValue("@CreatorId", request.CreatorId);
-
+                        command.Parameters.AddWithValue("@Slug", slug);
                         command.Parameters.AddWithValue("@AdminFullName", request.FullName);
                         command.Parameters.AddWithValue("@AdminEmail", request.Email);
                         command.Parameters.AddWithValue("@AdminPassword", request.Password); 
@@ -389,7 +424,50 @@ namespace EcommerceProject.Controllers
 
 
 
+        //public shop Portal 
 
+
+
+        [HttpGet("public/{slug}")]
+        public async Task<IActionResult> GetShopBySlug(string slug)
+        {
+            using (SqlConnection connection = new SqlConnection(_connectionString))
+            {
+                await connection.OpenAsync();
+                string query = "SELECT shop_id, shop_name, description, logo, contact_info, slug FROM Shops WHERE slug = @slug AND deleted_flag = 0";
+
+                using (SqlCommand cmd = new SqlCommand(query, connection))
+                {
+                    cmd.Parameters.AddWithValue("@slug", slug);
+                    using (var reader = await cmd.ExecuteReaderAsync())
+                    {
+                        if (!reader.HasRows)
+                            return NotFound(new { message = "Shop not found" });
+
+                        await reader.ReadAsync();
+
+                        // Original logo path from DB
+                        var logoPath = reader["logo"].ToString();
+
+                        // Normalize path (replace backslashes with forward slashes)
+                        logoPath = logoPath.Replace("\\", "/");
+
+                        // Make full absolute URL
+                        var logoUrl = $"{Request.Scheme}://{Request.Host}/{logoPath}";
+
+                        return Ok(new
+                        {
+                            ShopId = reader["shop_id"],
+                            ShopName = reader["shop_name"],
+                            Description = reader["description"],
+                            Logo = logoUrl,
+                            ContactInfo = reader["contact_info"],
+                            Slug = reader["slug"]
+                        });
+                    }
+                }
+            }
+        }
 
 
 
