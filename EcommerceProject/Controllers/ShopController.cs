@@ -424,7 +424,7 @@ namespace EcommerceProject.Controllers
 
 
 
-        //public shop Portal 
+        //public Shop Public Portal 
 
 
 
@@ -449,7 +449,7 @@ namespace EcommerceProject.Controllers
                         // Original logo path from DB
                         var logoPath = reader["logo"].ToString();
 
-                        // Normalize path (replace backslashes with forward slashes)
+                        
                         logoPath = logoPath.Replace("\\", "/");
 
                         // Make full absolute URL
@@ -469,6 +469,85 @@ namespace EcommerceProject.Controllers
             }
         }
 
+
+        [HttpGet("public/{slug}/products")]
+        public async Task<IActionResult> GetProductsByShopSlug(string slug, int page = 1, int pageSize = 10)
+        {
+            using (SqlConnection connection = new SqlConnection(_connectionString))
+            {
+                await connection.OpenAsync();
+
+                // First find ShopId by slug
+                string shopQuery = "SELECT shop_id FROM Shops WHERE slug = @slug AND deleted_flag = 0";
+                int? shopId = null;
+
+                using (SqlCommand shopCmd = new SqlCommand(shopQuery, connection))
+                {
+                    shopCmd.Parameters.AddWithValue("@slug", slug);
+                    var result = await shopCmd.ExecuteScalarAsync();
+                    if (result == null)
+                        return NotFound(new { message = "Shop not found" });
+
+                    shopId = Convert.ToInt32(result);
+                }
+
+                // Products query with pagination
+                string productQuery = @"
+            SELECT product_id,product_name, price,description, image_url 
+            FROM Products 
+            WHERE shop_id = @shopId AND is_deleted = 0
+            ORDER BY product_id DESC
+            OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY;
+
+            SELECT COUNT(*) FROM Products WHERE shop_id = @shopId AND is_deleted = 0;
+        ";
+
+                using (SqlCommand productCmd = new SqlCommand(productQuery, connection))
+                {
+                    int offset = (page - 1) * pageSize;
+                    productCmd.Parameters.AddWithValue("@shopId", shopId);
+                    productCmd.Parameters.AddWithValue("@offset", offset);
+                    productCmd.Parameters.AddWithValue("@pageSize", pageSize);
+
+                    using (var reader = await productCmd.ExecuteReaderAsync())
+                    {
+                        var products = new List<object>();
+
+                        while (await reader.ReadAsync())
+                        {
+                            var imagePath = reader["image_url"].ToString().Replace("\\", "/");
+                            var imageUrl = $"{Request.Scheme}://{Request.Host}/{imagePath}";
+
+                            products.Add(new
+                            {
+                                ProductId = reader["product_id"],
+                                Name = reader["product_name"],
+                                Price = reader["price"],
+                                Description = reader["description"],
+                                //Discount = reader["discount"],
+                                ImageUrl = imageUrl
+                            });
+                        }
+
+                        // Move to 2nd result set for total count
+                        await reader.NextResultAsync();
+                        int totalCount = 0;
+                        if (await reader.ReadAsync())
+                        {
+                            totalCount = reader.GetInt32(0);
+                        }
+
+                        return Ok(new
+                        {
+                            Page = page,
+                            PageSize = pageSize,
+                            TotalCount = totalCount,
+                            Products = products
+                        });
+                    }
+                }
+            }
+        }
 
 
 
