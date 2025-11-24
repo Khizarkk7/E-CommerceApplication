@@ -22,6 +22,7 @@
         public ShippingDto Shipping { get; set; }
         public PaymentDto Payment { get; set; }
         public List<CartItemDto> CartItems { get; set; }
+       
     }
 
     public class CustomerDto
@@ -46,10 +47,81 @@
 
     public class CartItemDto
     {
+        public string Name { get; set; }
         public int ProductId { get; set; }
         public int Quantity { get; set; }
         public decimal Price { get; set; }
     }
+    public class CancelRequest
+    {
+        public string Reason { get; set; }
+    }
 
+
+    // Add these to your existing Models
+    public class UpdateOrderStatusRequest
+    {
+        public string OrderStatus { get; set; }
+        public string PaymentStatus { get; set; }
+        public string TransactionId { get; set; }
+    }
+
+    public class OrderResponse
+    {
+        public int OrderId { get; set; }
+        public int ShopId { get; set; }
+        public decimal TotalAmount { get; set; }
+        public string OrderStatus { get; set; }
+        public string PaymentStatus { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public CustomerDto Customer { get; set; }
+        public ShippingDto Shipping { get; set; }
+        public PaymentResponse Payment { get; set; }
+        public List<OrderItemResponse> Items { get; set; }
+    }
+
+    public class PaymentResponse
+    {
+        public string Method { get; set; }
+        public decimal Amount { get; set; }
+        public string Status { get; set; }
+        public string TransactionId { get; set; }
+        public DateTime? PaymentDate { get; set; }
+    }
+
+    public class OrderItemResponse
+    {
+        public int ProductId { get; set; }
+        public string Name { get; set; }
+        public int Quantity { get; set; }
+        public decimal Price { get; set; }
+        public decimal Total => Price * Quantity;
+    }
+
+    // Update CartItemDto to include Name
+    public class CartItem
+    {
+        public int ProductId { get; set; }
+        public string Name { get; set; }
+        public int Quantity { get; set; }
+        public decimal Price { get; set; }
+        public string ImageUrl { get; set; }
+    }
+
+
+
+    public class PaymentRequest
+    {
+        public int OrderId { get; set; }
+        public string ReturnUrl { get; set; }
+    }
+
+    public class PaymentCallbackRequest
+    {
+        public int OrderId { get; set; }
+        public bool Success { get; set; }
+        public string TransactionId { get; set; }
+        public string Message { get; set; }
+    }
 
 }
