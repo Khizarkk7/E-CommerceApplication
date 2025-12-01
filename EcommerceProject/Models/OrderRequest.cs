@@ -18,6 +18,7 @@
     public class OrderRequest
     {
         public int ShopId { get; set; }
+
         public CustomerDto Customer { get; set; }
         public ShippingDto Shipping { get; set; }
         public PaymentDto Payment { get; set; }
@@ -27,6 +28,7 @@
 
     public class CustomerDto
     {
+        public int? CustomerId { get; set; }
         public string FullName { get; set; }
         public string Email { get; set; }
         public string Phone { get; set; }
