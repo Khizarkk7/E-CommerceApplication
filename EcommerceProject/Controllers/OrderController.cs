@@ -26,136 +26,104 @@ namespace EcommerceProject.Controllers
         public IActionResult CreateOrder([FromBody] OrderRequest order)
         {
             if (order == null || order.CartItems == null || !order.CartItems.Any())
-                return BadRequest(new { success = false, message = "Invalid order data." });
+                return BadRequest("Invalid order data");
 
-            using (SqlConnection conn = new SqlConnection(_connectionString))
+            using var conn = new SqlConnection(_connectionString);
+            conn.Open();
+            using var tran = conn.BeginTransaction();
+
+            try
             {
-                conn.Open();
-                using (SqlTransaction transaction = conn.BeginTransaction())
+                decimal totalAmount = order.CartItems.Sum(x => x.Price * x.Quantity);
+
+                string orderStatus = order.Payment.Method.ToLower() == "cod" ? "processing" : "pending";
+                orderStatus = orderStatus.Trim().ToLower(); // extra safety
+
+
+                string paymentStatus = order.Payment.Method == "cod"
+                    ? "paid"
+                    : "initiated";
+
+                // 1️⃣ Orders
+                int orderId;
+                using (var cmd = new SqlCommand(@"
+            INSERT INTO Orders (customer_id, shop_id, total_amount, order_status, payment_status, created_at)
+            OUTPUT INSERTED.order_id
+            VALUES (@CustomerId, @ShopId, @Total, @OrderStatus, @PaymentStatus, GETDATE())",
+                    conn, tran))
                 {
-                    int orderId = 0;
-                    try
-                    {
-                        // Map order_status and payment_status
-                        string orderStatus = order.Payment.Method.ToLower() == "cod" ? "processing" : "pending";
-                        string paymentStatus = order.Payment.Method.ToLower() == "cod" ? "pending_cod" : "pending";
+                    cmd.Parameters.AddWithValue("@CustomerId", order.Customer?.CustomerId ?? (object)DBNull.Value);
+                    cmd.Parameters.AddWithValue("@ShopId", order.ShopId);
+                    cmd.Parameters.AddWithValue("@Total", totalAmount);
+                    cmd.Parameters.AddWithValue("@OrderStatus", orderStatus);
+                    cmd.Parameters.AddWithValue("@PaymentStatus", paymentStatus);
 
-                        // 1️⃣ Insert into Orders
-                        try
-                        {
-                            using (SqlCommand cmd = new SqlCommand(@"
-                        INSERT INTO Orders (customer_id, shop_id, total_amount, order_status, payment_status, created_at)
-                        OUTPUT INSERTED.order_id
-                        VALUES (@CustomerId, @ShopId, @TotalAmount, @OrderStatus, @PaymentStatus, GETDATE())", conn, transaction))
-                            {
-                                cmd.Parameters.AddWithValue("@CustomerId", (object)order.Customer?.CustomerId ?? DBNull.Value);
-                                cmd.Parameters.AddWithValue("@ShopId", order.ShopId);
-                                cmd.Parameters.AddWithValue("@TotalAmount", order.CartItems.Sum(i => i.Price * i.Quantity));
-                                cmd.Parameters.AddWithValue("@OrderStatus", orderStatus);
-                                cmd.Parameters.AddWithValue("@PaymentStatus", paymentStatus);
-
-                                orderId = (int)cmd.ExecuteScalar();
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            throw new Exception($"Error in Orders table: {ex.Message}", ex);
-                        }
-
-                        // 2️⃣ Insert OrderDetails
-                        foreach (var item in order.CartItems)
-                        {
-                            try
-                            {
-                                using (SqlCommand cmd = new SqlCommand(@"
-                            INSERT INTO OrderDetails (order_id, product_id, product_name, quantity, price, total)
-                            VALUES (@OrderId, @ProductId, @ProductName, @Quantity, @Price, @Total)", conn, transaction))
-                                {
-                                    cmd.Parameters.AddWithValue("@OrderId", orderId);
-                                    cmd.Parameters.AddWithValue("@ProductId", item.ProductId);
-                                    cmd.Parameters.AddWithValue("@ProductName", item.Name);
-                                    cmd.Parameters.AddWithValue("@Quantity", item.Quantity);
-                                    cmd.Parameters.AddWithValue("@Price", item.Price);
-                                    cmd.Parameters.AddWithValue("@Total", item.Price * item.Quantity);
-
-                                    cmd.ExecuteNonQuery();
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                throw new Exception($"Error in OrderDetails table for ProductId {item.ProductId}: {ex.Message}", ex);
-                            }
-                        }
-
-                        // 3️⃣ Insert ShippingDetails
-                        try
-                        {
-                            using (SqlCommand cmd = new SqlCommand(@"
-                        INSERT INTO ShippingDetails
-                        (order_id, full_name, phone, address, city, province, postal_code, courier_name, tracking_number, shipping_status)
-                        VALUES
-                        (@OrderId, @FullName, @Phone, @Address, @City, @Province, @PostalCode, NULL, NULL, @ShippingStatus)", conn, transaction))
-                            {
-                                cmd.Parameters.AddWithValue("@OrderId", orderId);
-                                cmd.Parameters.AddWithValue("@FullName", order.Customer.FullName);
-                                cmd.Parameters.AddWithValue("@Phone", order.Customer.Phone);
-                                cmd.Parameters.AddWithValue("@Address", order.Shipping.Address);
-                                cmd.Parameters.AddWithValue("@City", order.Shipping.City);
-                                cmd.Parameters.AddWithValue("@Province", order.Shipping.Province);
-                                cmd.Parameters.AddWithValue("@PostalCode", order.Shipping.PostalCode);
-                                cmd.Parameters.AddWithValue("@ShippingStatus", "pending");
-
-                                cmd.ExecuteNonQuery();
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            throw new Exception($"Error in ShippingDetails table: {ex.Message}", ex);
-                        }
-
-                        // 4️⃣ Insert Payments
-                        try
-                        {
-                            using (SqlCommand cmd = new SqlCommand(@"
-                        INSERT INTO Payments (order_id, payment_method, amount, payment_status, created_at)
-                        VALUES (@OrderId, @Method, @Amount, @PaymentStatus, GETDATE())", conn, transaction))
-                            {
-                                cmd.Parameters.AddWithValue("@OrderId", orderId);
-                                cmd.Parameters.AddWithValue("@Method", order.Payment.Method);
-                                cmd.Parameters.AddWithValue("@Amount", order.CartItems.Sum(i => i.Price * i.Quantity));
-                                cmd.Parameters.AddWithValue("@PaymentStatus", paymentStatus);
-
-                                cmd.ExecuteNonQuery();
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            throw new Exception($"Error in Payments table: {ex.Message}", ex);
-                        }
-
-                        transaction.Commit();
-
-                        return Ok(new
-                        {
-                            success = true,
-                            message = "Order created successfully",
-                            orderId,
-                            orderStatus,
-                            paymentStatus
-                        });
-                    }
-                    catch (Exception ex)
-                    {
-                        transaction.Rollback();
-                        return StatusCode(500, new
-                        {
-                            success = false,
-                            message = "Error creating order",
-                            error = ex.Message,
-                            inner = ex.InnerException?.Message
-                        });
-                    }
+                    orderId = (int)cmd.ExecuteScalar();
                 }
+
+                // 2️⃣ OrderDetails
+                foreach (var item in order.CartItems)
+                {
+                    using var cmd = new SqlCommand(@"
+                INSERT INTO OrderDetails (order_id, product_id, product_name, quantity, price, total)
+                VALUES (@OrderId, @ProductId, @Name, @Qty, @Price, @Total)",
+                        conn, tran);
+
+                    cmd.Parameters.AddWithValue("@OrderId", orderId);
+                    cmd.Parameters.AddWithValue("@ProductId", item.ProductId);
+                    cmd.Parameters.AddWithValue("@Name", item.Name);
+                    cmd.Parameters.AddWithValue("@Qty", item.Quantity);
+                    cmd.Parameters.AddWithValue("@Price", item.Price);
+                    cmd.Parameters.AddWithValue("@Total", item.Price * item.Quantity);
+
+                    cmd.ExecuteNonQuery();
+                }
+
+                // 3️⃣ Shipping
+                using (var cmd = new SqlCommand(@"
+            INSERT INTO ShippingDetails (order_id, full_name, phone, address, city, province, postal_code, shipping_status)
+            VALUES (@OrderId, @Name, @Phone, @Address, @City, @Province, @Postal, 'pending')",
+                    conn, tran))
+                {
+                    cmd.Parameters.AddWithValue("@OrderId", orderId);
+                    cmd.Parameters.AddWithValue("@Name", order.Customer.FullName);
+                    cmd.Parameters.AddWithValue("@Phone", order.Customer.Phone);
+                    cmd.Parameters.AddWithValue("@Address", order.Shipping.Address);
+                    cmd.Parameters.AddWithValue("@City", order.Shipping.City);
+                    cmd.Parameters.AddWithValue("@Province", order.Shipping.Province);
+                    cmd.Parameters.AddWithValue("@Postal", order.Shipping.PostalCode);
+                    cmd.ExecuteNonQuery();
+                }
+
+                // 4️⃣ Payment record
+                using (var cmd = new SqlCommand(@"
+            INSERT INTO Payments (order_id, payment_method, amount, payment_status, created_at)
+            VALUES (@OrderId, @Method, @Amount, @Status, GETDATE())",
+                    conn, tran))
+                {
+                    cmd.Parameters.AddWithValue("@OrderId", orderId);
+                    cmd.Parameters.AddWithValue("@Method", order.Payment.Method);
+                    cmd.Parameters.AddWithValue("@Amount", totalAmount);
+                    cmd.Parameters.AddWithValue("@Status", paymentStatus);
+                    cmd.ExecuteNonQuery();
+                }
+
+                tran.Commit();
+
+                return Ok(new
+                {
+                    success = true,
+                    message = "Order created successfully",
+                    orderId,
+                    orderStatus,
+                    paymentStatus,
+                    requiresPayment = order.Payment.Method.ToLower() != "cod" // true for online payments
+                });
+            }
+            catch
+            {
+                tran.Rollback();
+                throw;
             }
         }
 

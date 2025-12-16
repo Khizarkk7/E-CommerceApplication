@@ -17,157 +17,86 @@ namespace EcommerceProject.Controllers
         }
 
         // ✅ INITIATE PAYMENT
-        [HttpPost("Initiate")]
+        [HttpPost("initiate")]
         public IActionResult InitiatePayment([FromBody] PaymentRequest request)
         {
-            if (request == null)
-                return BadRequest(new { success = false, message = "Invalid payment data." });
+            using var conn = new SqlConnection(_connectionString);
+            conn.Open();
 
-            try
+            decimal amount;
+            string method;
+
+            using (var cmd = new SqlCommand(@"
+        SELECT amount, payment_method 
+        FROM Payments 
+        WHERE order_id = @OrderId AND payment_status = 'initiated'", conn))
             {
-                // Verify order exists and is pending payment
-                using (SqlConnection conn = new SqlConnection(_connectionString))
-                {
-                    conn.Open();
+                cmd.Parameters.AddWithValue("@OrderId", request.OrderId);
 
-                    string orderStatus, paymentMethod;
-                    decimal amount;
+                using var reader = cmd.ExecuteReader();
+                if (!reader.Read())
+                    return BadRequest("Invalid payment state");
 
-                    using (SqlCommand cmd = new SqlCommand(@"
-                        SELECT o.order_status, p.payment_method, p.amount
-                        FROM Orders o
-                        JOIN Payments p ON o.order_id = p.order_id
-                        WHERE o.order_id = @OrderId", conn))
-                    {
-                        cmd.Parameters.AddWithValue("@OrderId", request.OrderId);
-
-                        using (var reader = cmd.ExecuteReader())
-                        {
-                            if (reader.Read())
-                            {
-                                orderStatus = reader.GetString("order_status");
-                                paymentMethod = reader.GetString("payment_method");
-                                amount = reader.GetDecimal("amount");
-                            }
-                            else
-                            {
-                                return NotFound(new { success = false, message = "Order not found" });
-                            }
-                        }
-                    }
-
-                    // Validate order status
-                    if (orderStatus != "pending_payment")
-                    {
-                        return BadRequest(new { success = false, message = "Order is not in pending payment status" });
-                    }
-
-                    // Generate payment gateway URL based on method
-                    string paymentUrl = GeneratePaymentUrl(request.OrderId, amount, paymentMethod, request.ReturnUrl);
-
-                    return Ok(new
-                    {
-                        success = true,
-                        paymentUrl = paymentUrl,
-                        orderId = request.OrderId,
-                        amount = amount,
-                        paymentMethod = paymentMethod
-                    });
-                }
+                amount = reader.GetDecimal(0);
+                method = reader.GetString(1);
             }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { success = false, message = "Error initiating payment", error = ex.Message });
-            }
+
+            string paymentUrl = GeneratePaymentUrl(
+                request.OrderId,
+                amount,
+                method,
+                request.ReturnUrl
+            );
+
+            return Ok(new { paymentUrl });
         }
+
 
         // ✅ PROCESS PAYMENT CALLBACK (After Gateway Redirect)
-        [HttpPost("Callback")]
-        public IActionResult PaymentCallback([FromBody] PaymentCallbackRequest request)
+        [HttpPost("callback")]
+        public IActionResult PaymentCallback(PaymentCallbackRequest request)
         {
+            using var conn = new SqlConnection(_connectionString);
+            conn.Open();
+            using var tran = conn.BeginTransaction();
+
             try
             {
-                using (SqlConnection conn = new SqlConnection(_connectionString))
+                string paymentStatus = request.Success ? "paid" : "failed";
+                string orderStatus = request.Success ? "confirmed" : "pending_payment";
+
+                using (var cmd = new SqlCommand(@"
+            UPDATE Payments
+            SET payment_status = @Status, transaction_id = @Txn
+            WHERE order_id = @OrderId", conn, tran))
                 {
-                    conn.Open();
-                    SqlTransaction transaction = conn.BeginTransaction();
-
-                    try
-                    {
-                        // Update payment status
-                        using (SqlCommand cmd = new SqlCommand(@"
-                            UPDATE Payments 
-                            SET payment_status = @PaymentStatus,
-                                transaction_id = @TransactionId,
-                                payment_date = GETDATE()
-                            WHERE order_id = @OrderId", conn, transaction))
-                        {
-                            cmd.Parameters.AddWithValue("@OrderId", request.OrderId);
-                            cmd.Parameters.AddWithValue("@PaymentStatus", request.Success ? "paid" : "failed");
-                            cmd.Parameters.AddWithValue("@TransactionId", request.TransactionId ?? (object)DBNull.Value);
-                            cmd.ExecuteNonQuery();
-                        }
-
-                        // Update order status if payment successful
-                        if (request.Success)
-                        {
-                            using (SqlCommand cmd = new SqlCommand(@"
-                                UPDATE Orders 
-                                SET order_status = 'confirmed',
-                                    payment_status = 'paid',
-                                    updated_at = GETDATE()
-                                WHERE order_id = @OrderId", conn, transaction))
-                            {
-                                cmd.Parameters.AddWithValue("@OrderId", request.OrderId);
-                                cmd.ExecuteNonQuery();
-                            }
-
-                            // Update shipping status
-                            using (SqlCommand cmd = new SqlCommand(@"
-                                UPDATE ShippingDetails 
-                                SET shipping_status = 'pending'
-                                WHERE order_id = @OrderId", conn, transaction))
-                            {
-                                cmd.Parameters.AddWithValue("@OrderId", request.OrderId);
-                                cmd.ExecuteNonQuery();
-                            }
-
-                            // Update stock
-                            using (SqlCommand cmd = new SqlCommand(@"
-                                UPDATE Stock 
-                                SET quantity = quantity - od.quantity
-                                FROM OrderDetails od
-                                WHERE od.order_id = @OrderId 
-                                AND Stock.product_id = od.product_id 
-                                AND Stock.shop_id = (SELECT shop_id FROM Orders WHERE order_id = @OrderId)", conn, transaction))
-                            {
-                                cmd.Parameters.AddWithValue("@OrderId", request.OrderId);
-                                cmd.ExecuteNonQuery();
-                            }
-                        }
-
-                        transaction.Commit();
-
-                        return Ok(new
-                        {
-                            success = true,
-                            message = request.Success ? "Payment processed successfully" : "Payment failed",
-                            orderId = request.OrderId,
-                            orderStatus = request.Success ? "confirmed" : "pending_payment"
-                        });
-                    }
-                    catch (Exception ex)
-                    {
-                        transaction.Rollback();
-                        throw;
-                    }
+                    cmd.Parameters.AddWithValue("@OrderId", request.OrderId);
+                    cmd.Parameters.AddWithValue("@Status", paymentStatus);
+                    cmd.Parameters.AddWithValue("@Txn", request.TransactionId ?? (object)DBNull.Value);
+                    cmd.ExecuteNonQuery();
                 }
+
+                using (var cmd = new SqlCommand(@"
+            UPDATE Orders
+            SET order_status = @OrderStatus, payment_status = @PaymentStatus
+            WHERE order_id = @OrderId", conn, tran))
+                {
+                    cmd.Parameters.AddWithValue("@OrderId", request.OrderId);
+                    cmd.Parameters.AddWithValue("@OrderStatus", orderStatus);
+                    cmd.Parameters.AddWithValue("@PaymentStatus", paymentStatus);
+                    cmd.ExecuteNonQuery();
+                }
+
+                tran.Commit();
+                return Ok();
             }
-            catch (Exception ex)
+            catch
             {
-                return StatusCode(500, new { success = false, message = "Error processing payment callback", error = ex.Message });
+                tran.Rollback();
+                throw;
             }
         }
+
 
         // CHECK PAYMENT STATUS
         [HttpGet("Status/{orderId}")]
@@ -231,28 +160,41 @@ namespace EcommerceProject.Controllers
 
         private string GeneratePaymentUrl(int orderId, decimal amount, string method, string returnUrl)
         {
-            // Generate payment gateway URLs
-            return method.ToLower() switch
+            // Convert method to lowercase for consistent comparison
+            method = method.ToLower();
+
+            // Generate payment URLs based on the selected method
+            return method switch
             {
-                "jazzcash" => $"https://sandbox.jazzcash.com.pk/ApplicationAPI/API/2.0/Purchase/DoMWalletTransaction?orderId={orderId}&amount={amount}&returnUrl={returnUrl}",
-                "easypaisa" => $"https://easypay.easypaisa.com.pk/easypay/Index.jsf?orderRefNum={orderId}&amount={amount}&postBackURL={returnUrl}",
-                "card" => $"/payment/card?orderId={orderId}&amount={amount}",
+                // JazzCash Sandbox URL
+                "jazzcash" => $"https://sandbox.jazzcash.com.pk/ApplicationAPI/API/2.0/Purchase/DoMWalletTransaction" +
+                              $"?orderId={orderId}&amount={amount}&returnUrl={returnUrl}",
+
+                // Easypaisa Sandbox/Test URL
+                "easypaisa" => $"https://easypay.easypaisa.com.pk/easypay/Index.jsf" +
+                               $"?orderRefNum={orderId}&amount={amount}&postBackURL={returnUrl}",
+
+                // Visa Card Sandbox (test cards)
+                "card" => $"https://sandbox.visa.com/test-payment?orderId={orderId}&amount={amount}&returnUrl={returnUrl}",
+
+                // Unsupported payment method
                 _ => throw new ArgumentException("Unsupported payment method")
             };
         }
-    }
 
-    public class PaymentRequest
-    {
-        public int OrderId { get; set; }
-        public string ReturnUrl { get; set; }
-    }
 
-    public class PaymentCallbackRequest
-    {
-        public int OrderId { get; set; }
-        public bool Success { get; set; }
-        public string TransactionId { get; set; }
-        public string Message { get; set; }
+        public class PaymentRequest
+        {
+            public int OrderId { get; set; }
+            public string ReturnUrl { get; set; }
+        }
+
+        public class PaymentCallbackRequest
+        {
+            public int OrderId { get; set; }
+            public bool Success { get; set; }
+            public string TransactionId { get; set; }
+            public string Message { get; set; }
+        }
     }
 }
