@@ -249,7 +249,115 @@ public async Task<IActionResult> EditProduct(int productId, [FromForm] ProductRe
 
 
 
+        [HttpGet("shops/{slug}/products/search")]
+        public IActionResult SearchProducts(
+             string slug,
+             string q,
+             int page = 1,
+             int pageSize = 9)
+        {
+            if (string.IsNullOrWhiteSpace(slug) || string.IsNullOrWhiteSpace(q))
+                return BadRequest(new { success = false, message = "Shop and query are required" });
+
+            q = q.Trim();
+
+            try
+            {
+                using SqlConnection conn = new SqlConnection(_connectionString);
+                conn.Open();
+
+                // 1️⃣ Resolve ShopId from Slug
+                int shopId;
+                using (SqlCommand shopCmd = new SqlCommand(
+                    "SELECT shop_id FROM Shops WHERE slug = @Slug AND deleted_flag = 0", conn))
+                {
+                    shopCmd.Parameters.AddWithValue("@Slug", slug);
+                    var result = shopCmd.ExecuteScalar();
+
+                    if (result == null)
+                        return NotFound(new { success = false, message = "Shop not found" });
+
+                    shopId = (int)result;
+                }
+
+                // 2️⃣ Search Products
+                var products = new List<object>();
+
+                using SqlCommand cmd = new SqlCommand(@"
+            SELECT 
+                p.product_id,
+                p.product_name,
+                p.description,
+                p.price,
+                p.image_url,
+                s.quantity,
+                COUNT(*) OVER() AS TotalCount
+            FROM Products p
+            INNER JOIN Stock s ON p.product_id = s.product_id
+            WHERE 
+                p.shop_id = @ShopId
+                AND p.is_deleted = 0
+                AND (
+                    p.product_name LIKE '%' + @Query + '%'
+                    OR p.description LIKE '%' + @Query + '%'
+                )
+            ORDER BY p.product_id DESC
+            OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY", conn);
+
+                cmd.Parameters.AddWithValue("@ShopId", shopId);
+                cmd.Parameters.AddWithValue("@Query", q);
+                cmd.Parameters.AddWithValue("@Offset", (page - 1) * pageSize);
+                cmd.Parameters.AddWithValue("@PageSize", pageSize);
+
+                int totalCount = 0;
+
+                using SqlDataReader reader = cmd.ExecuteReader();
+                while (reader.Read())
+                {
+                    totalCount = reader.GetInt32(reader.GetOrdinal("TotalCount"));
+
+                    string imagePath = reader["image_url"] as string;
+
+                    products.Add(new
+                    {
+                        ProductId = reader.GetInt32("product_id"),
+                        Name = reader.GetString("product_name"),
+                        Description = reader["description"] as string,
+                        Price = reader.GetDecimal("price"),
+                        Stock = reader.GetInt32("quantity"),
+                        ImageUrl = string.IsNullOrEmpty(imagePath)
+                            ? null
+                            : $"{Request.Scheme}://{Request.Host}/uploads/products/{Path.GetFileName(imagePath)}"
+                    });
+                }
+
+                return Ok(new
+                {
+                    success = true,
+                    page,
+                    pageSize,
+                    totalCount,
+                    totalPages = (int)Math.Ceiling(totalCount / (double)pageSize),
+                    data = products
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new
+                {
+                    success = false,
+                    message = "Search failed",
+                    error = ex.Message
+                });
+            }
+        }
+
+
+
     }
+
+
+
 
 }
 
